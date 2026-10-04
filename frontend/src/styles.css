@@ -16,7 +16,7 @@ body {
 
 /* ---------------- Form panel ---------------- */
 .panel {
-  flex: 0 0 420px;
+  flex: 0 0 470px;
   background: #fff;
   border-radius: 10px;
   padding: 20px 24px;
@@ -48,6 +48,27 @@ label input, label textarea {
   border: 1px solid #c7ccd3;
   border-radius: 6px;
 }
+/* Date picker fields (react-datepicker) */
+.field { margin-bottom: 10px; font-size: 14px; }
+.field label { margin-bottom: 0; }
+.field .react-datepicker-wrapper { display: block; width: 100%; }
+.field .react-datepicker__input-container input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 7px 9px;
+  font: inherit;
+  border: 1px solid #c7ccd3;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.react-datepicker { font-family: inherit; font-size: 13px; }
+.react-datepicker__day--selected,
+.react-datepicker__day--in-range,
+.react-datepicker__day--keyboard-selected { background: #1f6feb; color: #fff; }
+.react-datepicker__day--in-selecting-range:not(.react-datepicker__day--in-range) { background: #cfe0fc; color: #222; }
+.react-datepicker__today-button { background: #f4f6f8; font-weight: 500; }
+
 label.inline { display: inline-flex; align-items: center; gap: 4px; margin: 0 14px 0 0; }
 label.inline input { width: auto; margin: 0; }
 
@@ -55,6 +76,14 @@ label.inline input { width: auto; margin: 0; }
 .label-text { min-width: 150px; font-weight: 500; }
 
 .hint { margin: -4px 0 10px; font-size: 13px; color: #1a7f37; }
+.editing-banner {
+  background: #fff6d6;
+  border: 1px solid #f0d77a;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  margin: 0 0 14px;
+}
 .error { color: #c62828; font-size: 14px; }
 
 .summary {
@@ -101,6 +130,8 @@ button.danger { color: #c62828; }
 .history { width: 100%; border-collapse: collapse; font-size: 13px; }
 .history th, .history td { border-bottom: 1px solid #e3e6ea; padding: 6px 4px; text-align: left; }
 .history td:last-child { white-space: nowrap; text-align: right; }
+.history td:nth-child(-n+3) { white-space: nowrap; }
+.history tr.editing td { background: #fff6d6; }
 .history .empty { text-align: center; color: #888; padding: 14px; }
 
 /* ---------------- Letter (A4) ---------------- */

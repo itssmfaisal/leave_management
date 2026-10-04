@@ -23,6 +23,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/years/{year}/opening", a.putOpening)
 	mux.HandleFunc("GET /api/leaves", a.listLeaves)
 	mux.HandleFunc("POST /api/leaves", a.createLeave)
+	mux.HandleFunc("PUT /api/leaves/{id}", a.updateLeave)
 	mux.HandleFunc("DELETE /api/leaves/{id}", a.deleteLeave)
 }
 
@@ -123,15 +124,48 @@ func (a *API) createLeave(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, saved)
 }
 
+func (a *API) updateLeave(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+	existing, err := a.store.GetLeave(id)
+	if errors.Is(err, ErrNotFound) {
+		notFound(w)
+		return
+	} else if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	var l Leave
+	if !readJSON(w, r, &l) {
+		return
+	}
+	l.Name, l.EmpNo, l.AppliedOn = existing.Name, existing.EmpNo, existing.AppliedOn
+	if msg := validateLeave(&l); msg != "" {
+		badRequest(w, msg)
+		return
+	}
+	saved, err := a.store.UpdateLeave(id, l)
+	if errors.Is(err, ErrNotFound) {
+		notFound(w)
+		return
+	} else if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, saved)
+}
+
 func (a *API) deleteLeave(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		badRequest(w, "Invalid id.")
+	id, ok := parseID(w, r)
+	if !ok {
 		return
 	}
 	switch err := a.store.DeleteLeave(id); {
 	case errors.Is(err, ErrNotFound):
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Leave not found."})
+		notFound(w)
 	case err != nil:
 		serverError(w, err)
 	default:
@@ -190,6 +224,15 @@ func parseYear(w http.ResponseWriter, r *http.Request) (int, bool) {
 	return year, true
 }
 
+func parseID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		badRequest(w, "Invalid id.")
+		return 0, false
+	}
+	return id, true
+}
+
 func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
@@ -207,6 +250,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func badRequest(w http.ResponseWriter, msg string) {
 	writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+}
+
+func notFound(w http.ResponseWriter) {
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "Leave not found."})
 }
 
 func serverError(w http.ResponseWriter, err error) {

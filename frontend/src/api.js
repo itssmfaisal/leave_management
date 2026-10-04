@@ -17,5 +17,6 @@ export const api = {
   setOpeningUsed: (year, used) => request("PUT", `/years/${year}/opening`, { used }),
   listLeaves: () => request("GET", "/leaves"),
   createLeave: (leave) => request("POST", "/leaves", leave),
+  updateLeave: (id, leave) => request("PUT", `/leaves/${id}`, leave),
   deleteLeave: (id) => request("DELETE", `/leaves/${id}`),
 };

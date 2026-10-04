@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import { addDays, daysInclusive, formatShort, todayISO, yearOf } from "./dates.js";
+import DateField from "./DateField.jsx";
 import Letter from "./Letter.jsx";
 import OpeningBalance from "./OpeningBalance.jsx";
 
@@ -27,6 +28,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [profileStatus, setProfileStatus] = useState("");
+  const [editing, setEditing] = useState(null); // leave being edited, or null for a new one
+  const formRef = useRef(null);
 
   // Fields that are auto-filled until the user edits them by hand.
   const touched = useRef(new Set());
@@ -94,7 +97,21 @@ export default function App() {
   function clearForm() {
     setForm(EMPTY_FORM);
     touched.current.clear();
+    setEditing(null);
     setError("");
+  }
+
+  function startEdit(leave) {
+    const { leaveType, isSaturday, lastWorkingDay, startDate, endDate, numDays, rejoinDate, reason } = leave;
+    setForm({ leaveType, isSaturday, lastWorkingDay, startDate, endDate, numDays: String(numDays), rejoinDate, reason });
+    // Keep auto-filling only the fields that still hold their auto-filled value.
+    touched.current = new Set();
+    if (lastWorkingDay !== addDays(startDate, -1)) touched.current.add("lastWorkingDay");
+    if (numDays !== daysInclusive(startDate, endDate)) touched.current.add("numDays");
+    if (rejoinDate !== addDays(endDate, 1)) touched.current.add("rejoinDate");
+    setEditing(leave);
+    setError("");
+    formRef.current?.scrollIntoView({ behavior: "smooth" });
   }
 
   async function handleSubmit(e) {
@@ -102,7 +119,10 @@ export default function App() {
     setError("");
     setSaving(true);
     try {
-      const saved = await api.createLeave({ ...profile, ...form, numDays: Number(form.numDays) });
+      const leave = { ...form, numDays: Number(form.numDays) };
+      const saved = editing
+        ? await api.updateLeave(editing.id, leave)
+        : await api.createLeave({ ...profile, ...leave });
       clearForm();
       refresh();
       setPrintTarget(saved);
@@ -117,6 +137,7 @@ export default function App() {
     if (!confirm(`Delete leave from ${formatShort(leave.startDate)}? Balances will be recalculated.`)) return;
     try {
       await api.deleteLeave(leave.id);
+      if (editing?.id === leave.id) clearForm();
       refresh();
     } catch (err) {
       setError(err.message);
@@ -125,10 +146,17 @@ export default function App() {
 
   /* ---------------- Live preview ---------------- */
 
-  const used = yearSummary?.used ?? 0;
+  // Used = opening days + earlier leaves that year. When editing, only leaves
+  // saved before this one count (same rule the server uses for the PDF).
+  const editingId = editing?.id ?? Infinity;
+  const used = (yearSummary?.openingUsed ?? 0) + leaves
+    .filter((l) => l.id < editingId && !l.isSaturday && yearOf(l.startDate) === formYear)
+    .reduce((sum, l) => sum + l.numDays, 0);
   const thisTime = form.isSaturday ? 0 : Number(form.numDays) || 0;
   const previewBalance = { eligibility: ELIGIBILITY, used, thisTime, remaining: ELIGIBILITY - used - thisTime };
-  const previewLeave = { ...profile, ...form, appliedOn: todayISO() };
+  const previewLeave = editing
+    ? { ...form, name: editing.name, empNo: editing.empNo, appliedOn: editing.appliedOn }
+    : { ...profile, ...form, appliedOn: todayISO() };
 
   const letterLeave = printTarget ?? previewLeave;
   const letterBalance = printTarget?.balance ?? previewBalance;
@@ -138,7 +166,13 @@ export default function App() {
       <section className="panel no-print">
         <h1>Leave Application</h1>
 
-        <form onSubmit={handleSubmit} autoComplete="off">
+        <form ref={formRef} onSubmit={handleSubmit} autoComplete="off">
+          {editing && (
+            <p className="editing-banner">
+              Editing leave applied on {formatShort(editing.appliedOn)} ({formatShort(editing.startDate)} – {formatShort(editing.endDate)}).
+              The application date and employee details on it stay the same.
+            </p>
+          )}
           <fieldset>
             <legend>Employee</legend>
             <label>Name
@@ -179,21 +213,21 @@ export default function App() {
             </div>
             {form.isSaturday && <p className="hint">Saturday leave is not deducted from eligibility.</p>}
 
-            <label>Last working day
-              <input type="date" required value={form.lastWorkingDay} onChange={(e) => update("lastWorkingDay", e.target.value)} />
-            </label>
-            <label>Holiday starts from
-              <input type="date" required value={form.startDate} onChange={(e) => update("startDate", e.target.value)} />
-            </label>
-            <label>Holiday end
-              <input type="date" required value={form.endDate} onChange={(e) => update("endDate", e.target.value)} />
-            </label>
+            <DateField id="lastWorkingDay" label="Last working day" value={form.lastWorkingDay}
+                       onChange={(v) => update("lastWorkingDay", v)}
+                       max={form.startDate && addDays(form.startDate, -1)} />
+            <DateField id="startDate" label="Holiday starts from" value={form.startDate}
+                       onChange={(v) => update("startDate", v)}
+                       selects="start" rangeStart={form.startDate} rangeEnd={form.endDate} />
+            <DateField id="endDate" label="Holiday end" value={form.endDate}
+                       onChange={(v) => update("endDate", v)} min={form.startDate}
+                       selects="end" rangeStart={form.startDate} rangeEnd={form.endDate} />
             <label>Number of days
               <input type="number" required min="0.5" step="0.5" value={form.numDays} onChange={(e) => update("numDays", e.target.value)} />
             </label>
-            <label>Re-joining date
-              <input type="date" required value={form.rejoinDate} onChange={(e) => update("rejoinDate", e.target.value)} />
-            </label>
+            <DateField id="rejoinDate" label="Re-joining date" value={form.rejoinDate}
+                       onChange={(v) => update("rejoinDate", v)}
+                       min={form.endDate && addDays(form.endDate, 1)} />
             <label>Reason of leave
               <textarea rows="3" required placeholder="Casual Leave" value={form.reason} onChange={(e) => update("reason", e.target.value)} />
             </label>
@@ -211,9 +245,9 @@ export default function App() {
 
           <div className="actions">
             <button type="submit" className="primary" disabled={saving}>
-              {saving ? "Saving…" : "Save & Download PDF"}
+              {saving ? "Saving…" : editing ? "Update & Download PDF" : "Save & Download PDF"}
             </button>
-            <button type="button" onClick={clearForm}>Clear form</button>
+            <button type="button" onClick={clearForm}>{editing ? "Cancel edit" : "Clear form"}</button>
           </div>
         </form>
 
@@ -231,7 +265,7 @@ export default function App() {
                 <tr><td colSpan="7" className="empty">No leave saved yet.</td></tr>
               )}
               {leaves.map((l) => (
-                <tr key={l.id}>
+                <tr key={l.id} className={editing?.id === l.id ? "editing" : ""}>
                   <td>{formatShort(l.appliedOn)}</td>
                   <td>{formatShort(l.startDate)}</td>
                   <td>{formatShort(l.endDate)}</td>
@@ -239,6 +273,7 @@ export default function App() {
                   <td>{l.isSaturday ? "Yes" : "No"}</td>
                   <td>{l.reason}</td>
                   <td>
+                    <button type="button" className="small" onClick={() => startEdit(l)}>Edit</button>{" "}
                     <button type="button" className="small" onClick={() => setPrintTarget(l)}>PDF</button>{" "}
                     <button type="button" className="small danger" onClick={() => handleDelete(l)}>✕</button>
                   </td>

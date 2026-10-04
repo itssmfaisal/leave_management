@@ -248,6 +248,24 @@ func (s *Store) GetLeave(id int64) (Leave, error) {
 	return Leave{}, ErrNotFound
 }
 
+// UpdateLeave changes the leave details. The application date and the
+// employee name/number it was made with are kept.
+func (s *Store) UpdateLeave(id int64, l Leave) (Leave, error) {
+	res, err := s.db.Exec(`
+		UPDATE leaves SET leave_type = ?, is_saturday = ?, last_working_day = ?, start_date = ?,
+		                  end_date = ?, num_days = ?, rejoin_date = ?, reason = ?
+		WHERE id = ?`,
+		l.LeaveType, l.IsSaturday, l.LastWorkingDay, l.StartDate,
+		l.EndDate, l.NumDays, l.RejoinDate, l.Reason, id)
+	if err != nil {
+		return Leave{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Leave{}, ErrNotFound
+	}
+	return s.GetLeave(id)
+}
+
 func (s *Store) DeleteLeave(id int64) error {
 	res, err := s.db.Exec(`DELETE FROM leaves WHERE id = ?`, id)
 	if err != nil {
