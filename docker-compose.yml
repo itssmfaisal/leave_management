@@ -1,14 +1,30 @@
+# Runs behind the shared Traefik (its own stack in /root/traefik), which
+# terminates TLS and routes https://leavecalc.byteworkstation.online here
+# over the external `traefik` network. No host port is published.
+#
+#   cd /root/leave_management && docker compose up -d --build
+
 services:
   leave-report:
     build: .
-    ports:
-      # Override with APP_PORT in .env, e.g. APP_PORT=127.0.0.1:8080 behind a reverse proxy.
-      - "${APP_PORT:-8080}:8080"
     environment:
       TZ: Asia/Dhaka   # "today's date" on the letter uses this time zone
     volumes:
       - leave-data:/data   # SQLite database lives here
     restart: unless-stopped
+    networks:
+      - traefik
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=traefik'
+      - 'traefik.http.routers.leavecalc.rule=Host(`leavecalc.byteworkstation.online`)'
+      - 'traefik.http.routers.leavecalc.entrypoints=websecure'
+      - 'traefik.http.routers.leavecalc.tls.certresolver=myresolver'
+      - 'traefik.http.services.leavecalc.loadbalancer.server.port=8080'
+
+networks:
+  traefik:
+    external: true
 
 volumes:
   leave-data:
